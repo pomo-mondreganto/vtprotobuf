@@ -1,0 +1,25 @@
+syntax = "proto3";
+option go_package = "testproto/aliases";
+
+import "google/protobuf/any.proto";
+
+message AliasedFields {
+    bytes bytes = 1;
+    repeated bytes repeated_bytes = 2;
+    optional bytes optional_bytes = 3;
+
+    string string = 4;
+    repeated string repeated_string = 5;
+    optional string optional_string = 6;
+
+    map<string, bytes> map_string_bytes = 7;
+    map<string, string> map_string_string = 8;
+
+    oneof oneof {
+        bytes oneof_bytes = 9;
+        string oneof_string = 10;
+    }
+
+    // Any contains string & bytes inside, test interop with wellknown unmarshalling.
+    google.protobuf.Any any = 11;
+}

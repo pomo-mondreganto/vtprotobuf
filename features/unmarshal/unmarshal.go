@@ -160,7 +160,7 @@ func (p *unmarshal) decodeMessage(varName, buf string, message *protogen.Message
 		p.P(`return err`)
 		p.P(`}`)
 	} else if wellknownIdent, wellknown := p.MapWellKnown(message); wellknown {
-		p.P(`if err := unmarshal_`, wellknownIdent.CodeName(), `(`, varName, `, `, buf, `); err != nil {`)
+		p.P(`if err := unmarshal_`, p.aliasSuffix(), wellknownIdent.CodeName(), `(`, varName, `, `, buf, `); err != nil {`)
 		p.P(`return err`)
 		p.P(`}`)
 		p.externals = append(p.externals, message)
@@ -294,7 +294,12 @@ func (p *unmarshal) mapField(varName string, field *protogen.Field) {
 		p.P(`if postStringIndex`, varName, ` > l {`)
 		p.P(`return `, p.Ident("io", `ErrUnexpectedEOF`))
 		p.P(`}`)
-		p.P(varName, ` = `, "string", `(dAtA[iNdEx:postStringIndex`, varName, `])`)
+		if p.alias {
+			p.P(`sliceData := dAtA[iNdEx:postStringIndex`, varName, `]`)
+			p.P(varName, ` = *(*string)(`, p.Ident("unsafe", `Pointer`), `(&sliceData))`)
+		} else {
+			p.P(varName, ` = `, "string", `(dAtA[iNdEx:postStringIndex`, varName, `])`)
+		}
 		p.P(`iNdEx = postStringIndex`, varName)
 	case protoreflect.MessageKind:
 		p.P(`var mapmsglen int`)
@@ -515,15 +520,34 @@ func (p *unmarshal) fieldItem(field *protogen.Field, fieldname string, message *
 		p.P(`if postIndex > l {`)
 		p.P(`return `, p.Ident("io", `ErrUnexpectedEOF`))
 		p.P(`}`)
+		if p.alias {
+			p.P(`sliceData := dAtA[iNdEx:postIndex]`)
+		}
 		if oneof {
-			p.P(`m.`, fieldname, ` = &`, field.GoIdent, `{`, field.GoName, ": ", typ, `(dAtA[iNdEx:postIndex])}`)
+			if p.alias {
+				p.P(`m.`, fieldname, ` = &`, field.GoIdent, `{`, field.GoName, `: *(*string)(`, p.Ident("unsafe", `Pointer`), `(&sliceData))}`)
+			} else {
+				p.P(`m.`, fieldname, ` = &`, field.GoIdent, `{`, field.GoName, `: string(dAtA[iNdEx:postIndex])}`)
+			}
 		} else if repeated {
-			p.P(`m.`, fieldname, ` = append(m.`, fieldname, `, `, typ, `(dAtA[iNdEx:postIndex]))`)
+			if p.alias {
+				p.P(`m.`, fieldname, ` = append(m.`, fieldname, `, *(*string)(`, p.Ident("unsafe", `Pointer`), `(&sliceData)))`)
+			} else {
+				p.P(`m.`, fieldname, ` = append(m.`, fieldname, `, string(dAtA[iNdEx:postIndex]))`)
+			}
 		} else if proto3 && !nullable {
-			p.P(`m.`, fieldname, ` = `, typ, `(dAtA[iNdEx:postIndex])`)
+			if p.alias {
+				p.P(`m.`, fieldname, ` = *(*string)(`, p.Ident("unsafe", `Pointer`), `(&sliceData))`)
+			} else {
+				p.P(`m.`, fieldname, ` = string(dAtA[iNdEx:postIndex])`)
+			}
 		} else {
-			p.P(`s := `, typ, `(dAtA[iNdEx:postIndex])`)
-			p.P(`m.`, fieldname, ` = &s`)
+			if p.alias {
+				p.P(`m.`, fieldname, ` = (*string)(`, p.Ident("unsafe", `Pointer`), `(&sliceData))`)
+			} else {
+				p.P(`s := string(dAtA[iNdEx:postIndex])`)
+				p.P(`m.`, fieldname, ` = &s`)
+			}
 		}
 		p.P(`iNdEx = postIndex`)
 	case protoreflect.GroupKind:
@@ -952,8 +976,8 @@ func (p *unmarshal) message(proto3 bool, message *protogen.Message) {
 
 func (p *unmarshal) generateForExternal(message *protogen.Message, ident *generator.FullIdent) {
 	m := p
-	p.Helper(fmt.Sprintf("unmarshal_%v", ident), func(p *generator.GeneratedFile) {
-		p.P(`func unmarshal_`, ident.CodeName(), `(m *`, ident.StructName(p), `, dAtA []byte) error {`)
+	p.Helper(fmt.Sprintf("unmarshal_%s%v", p.aliasSuffix(), ident), func(p *generator.GeneratedFile) {
+		p.P(`func unmarshal_`, m.aliasSuffix(), ident.CodeName(), `(m *`, ident.StructName(p), `, dAtA []byte) error {`)
 		p.P(`l := len(dAtA)`)
 		p.P(`iNdEx := 0`)
 		p.P(`var unknownFields []byte`)
@@ -1018,4 +1042,11 @@ func (p *unmarshal) generateForExternal(message *protogen.Message, ident *genera
 		p.P(`return nil`)
 		p.P(`}`)
 	})
+}
+
+func (p *unmarshal) aliasSuffix() string {
+	if p.alias {
+		return "alias_"
+	}
+	return ""
 }

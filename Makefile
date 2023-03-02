@@ -46,6 +46,7 @@ gen-testproto:
 		testproto/proto2/scalars.proto \
 		testproto/wellknown/wellknown.proto \
 		testproto/wellknown/another_wellknown.proto \
+		testproto/aliases/aliases.proto \
 		|| exit 1;
 
 gen-wellknown:
@@ -53,13 +54,26 @@ gen-wellknown:
 		--proto_path=testproto \
 		--proto_path=include \
 		--go_out=. \
-		--go-vtproto_opt=features=marshal+size+unmarshal+unmarshal_alias \
+		--go-vtproto_opt=features=marshal+size+unmarshal \
 		--go-vtproto_opt=wellknown=google.protobuf.Timestamp+google.protobuf.Duration \
 		--go-vtproto_out=allow-empty=true:. --plugin protoc-gen-go-vtproto="${GOBIN}/protoc-gen-go-vtproto" \
 		-I. \
 		testproto/wellknown/wellknown.proto \
 		testproto/wellknown/another_wellknown.proto \
 		|| exit 1;
+
+gen-aliases:
+	protoc \
+		--proto_path=testproto \
+		--proto_path=include \
+		--go_out=. \
+		--go-vtproto_opt=features=unmarshal+unmarshal_alias \
+		--go-vtproto_opt=wellknown=google.protobuf.Any \
+		--go-vtproto_out=allow-empty=true:. --plugin protoc-gen-go-vtproto="${GOBIN}/protoc-gen-go-vtproto" \
+		-I. \
+		testproto/aliases/aliases.proto \
+		|| exit 1;
+
 
 genall: install gen-include gen-conformance gen-testproto
 
